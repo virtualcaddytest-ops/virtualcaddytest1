@@ -5,9 +5,8 @@ import httpx
 
 app = FastAPI(title="CaddieAI Backend Core")
 
-# Configurazione API Keys (da impostare nei secrets di Render)
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 @app.get("/")
 def read_root():
@@ -17,43 +16,53 @@ def read_root():
 async def process_voice_rule(file: UploadFile = File(...)):
     start_time = time.time()
     audio_bytes = await file.read()
-
-    # 1. Speech-to-Text tramite Deepgram (Latenza ~0.8s)
-    async with httpx.AsyncClient() as client:
-        stt_response = await client.post(
-            "https://api.deepgram.com/v1/listen?language=it&model=nova-2",
-            headers={"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/m4a"},
-            content=audio_bytes
-        )
-        transcript = stt_response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
-
-    # 2. RAG + Inferenza LLM tramite Groq (Latenza ~1.2s)
-    system_prompt = (
-        "Sei un assistente esperto e diretto per le Regole del Golf R&A/USGA. "
-        "Rispondi al giocatore in massimo 3 o 4 punti elenco diretti, imperativi e operativi. "
-        "Nessun convenevole, nessuna spiegazione teorica o legalese. "
-        "Indica subito se c'è penalità o meno."
-    )
     
-    async with httpx.AsyncClient() as client:
-        llm_response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": transcript}
-                ],
-                "temperature": 0.2
-            }
-        )
-        ai_text = llm_response.json()["choices"][0]["message"]["content"]
+    if not audio_bytes:
+        return {"response_text": "Errore: File audio vuoto ricevuto dall'orologio."}
+    
+    if not DEEPGRAM_API_KEY or not GROQ_API_KEY:
+        return {"response_text": "Errore: Chiavi API non configurate su Render."}
 
-    total_latency = time.time() - start_time
+    # 1. Speech-to-Text tramite Deepgram
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            stt_response = await client.post(
+                "https://api.deepgram.com/v1/listen?language=it&model=nova-2",
+                headers={
+                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                    "Content-Type": "audio/m4a"
+                },
+                content=audio_bytes
+            )
+            
+            if stt_response.status_code != 200:
+                return {"response_text": f"Errore Deepgram ({stt_response.status_code}): {stt_response.text}"}
 
-    return {
-        "transcript": transcript,
-        "response_text": ai_text,
-        "latency_seconds": round(total_latency, 2)
-    }
+            stt_data = stt_response.json()
+            user_transcript = stt_data['results']['channels'][0]['alternatives'][0]['transcript']
+
+            if not user_transcript.strip():
+                return {"response_text": "Non ho sentito nulla, riprova a parlare."}
+
+            # 2. Elaborazione LLM tramite Groq
+            llm_response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                json={
+                    "model": "llama-3.1-8b-instant",
+                    "messages": [
+                        {"role": "system", "content": "Sei un caddie esperto di golf. Rispondi in massimo 2 frasi in italiano."},
+                        {"role": "user", "content": user_transcript}
+                    ],
+                    "max_tokens": 100
+                }
+            )
+
+            if llm_response.status_code != 200:
+                return {"response_text": f"Errore Groq ({llm_response.status_code}): {llm_response.text}"}
+
+            ai_text = llm_response.json()['choices'][0]['message']['content']
+            return {"response_text": ai_text}
+
+    except Exception as e:
+        return {"response_text": f"Errore server: {str(e)}"}
