@@ -22,7 +22,7 @@ async def process_voice_rule(file: UploadFile = File(...)):
     async with httpx.AsyncClient() as client:
         stt_response = await client.post(
             "https://api.deepgram.com/v1/listen?language=it&model=nova-2",
-            headers={"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/wav"},
+            headers={"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "audio/m4a"},
             content=audio_bytes
         )
         transcript = stt_response.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
