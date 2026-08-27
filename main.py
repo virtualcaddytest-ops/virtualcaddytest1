@@ -49,7 +49,7 @@ async def process_voice_rule(file: UploadFile = File(...)):
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                 json={
-                    "model": "llama3-8b-8192",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
                         {"role": "system", "content": "Sei un caddie esperto di golf. Rispondi in massimo 2 frasi in italiano."},
                         {"role": "user", "content": user_transcript}
