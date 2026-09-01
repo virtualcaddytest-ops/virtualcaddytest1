@@ -53,7 +53,7 @@ async def process_voice_rule(file: UploadFile = File(...)):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.1-8b-instant",
+                    "model": "openai/gpt-oss-20b",
                     "messages": [
                         {"role": "system", "content": "Sei un caddie esperto di golf. Rispondi in massimo 2 frasi in italiano."},
                         {"role": "user", "content": user_transcript}
