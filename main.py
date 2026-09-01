@@ -45,11 +45,15 @@ async def process_voice_rule(file: UploadFile = File(...)):
                 return {"response_text": "Non ho sentito nulla, riprova a parlare."}
 
             # 2. Elaborazione LLM tramite Groq
+          # Elaborazione LLM tramite Groq
             llm_response = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
                 json={
-                    "model": "llama-3.3-70b-versatile",
+                    "model": "llama-3.1-8b-instant",
                     "messages": [
                         {"role": "system", "content": "Sei un caddie esperto di golf. Rispondi in massimo 2 frasi in italiano."},
                         {"role": "user", "content": user_transcript}
